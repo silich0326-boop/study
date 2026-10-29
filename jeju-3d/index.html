@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b2530">
+<title>제주 3D 관광 지도</title>
+<style>
+:root {
+  --paper:#f8f7f2;
+  --ink:#233e35;
+  --muted:#758078;
+  --green:#234d43;
+  --line:#dfe3d9;
+  --orange:#d47744;
+  --panel:rgba(248,247,242,.94);
+  --bg:#0b2530;
+}
+* { box-sizing:border-box; }
+html,body { margin:0; height:100%; overflow:hidden; background:var(--bg); color:var(--ink);
+  font-family:"Pretendard","Noto Sans KR","Malgun Gothic",system-ui,sans-serif; line-height:1.5; }
+button,input { font:inherit; color:inherit; }
+button { cursor:pointer; }
+button:focus-visible,input:focus-visible { outline:3px solid var(--orange); outline-offset:2px; }
+[hidden] { display:none!important; }
+
+#gl { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; outline:none; }
+#labels { position:fixed; inset:0; pointer-events:none; overflow:hidden; }
+
+/* 지도 위 라벨 */
+.tag { position:absolute; left:0; top:0; pointer-events:auto; display:flex; align-items:baseline; gap:6px;
+  padding:4px 9px 4px 8px; border:0; border-left:4px solid var(--c); border-radius:6px;
+  background:rgba(11,37,48,.84); color:#fff; font-size:12.5px; white-space:nowrap; will-change:transform;
+  box-shadow:0 2px 8px rgba(0,0,0,.35); }
+.tag b { font-variant-numeric:tabular-nums; color:var(--c); filter:brightness(1.25); }
+.tag:hover,.tag.on { background:#fff; color:var(--ink); }
+.tag:hover b,.tag.on b { color:var(--ink); filter:none; }
+.tag.on { box-shadow:0 0 0 2px var(--c),0 4px 14px rgba(0,0,0,.4); }
+.lm { position:absolute; left:0; top:0; font-size:11.5px; color:#fff; opacity:.8; white-space:nowrap; will-change:transform;
+  text-shadow:0 1px 3px rgba(0,0,0,.8); display:flex; align-items:center; gap:5px; }
+.lm::before { content:""; width:6px; height:6px; border-radius:50%; background:#fff; box-shadow:0 0 0 2px rgba(255,255,255,.3); }
+
+/* 상단 좌측 */
+.title { position:fixed; left:20px; top:16px; color:#fff; text-shadow:0 1px 6px rgba(0,0,0,.5); max-width:calc(100% - 40px); }
+.title h1 { margin:0; font-size:22px; letter-spacing:-.5px; }
+.title p { margin:2px 0 0; font-size:12.5px; opacity:.85; }
+.tools { position:fixed; left:20px; top:78px; display:flex; flex-wrap:wrap; align-items:center; gap:8px; max-width:calc(100% - 40px); }
+.chip { height:34px; padding:0 13px; border:1px solid var(--line); border-radius:17px; background:var(--panel); font-size:13px; font-weight:600; }
+.chip:hover { background:#fff; }
+.chip[aria-pressed="true"] { background:var(--green); border-color:var(--green); color:#fff; }
+.exag { display:flex; align-items:center; gap:8px; height:34px; padding:0 13px; border-radius:17px; background:var(--panel); font-size:13px; font-weight:600; }
+.exag input { width:90px; accent-color:var(--green); }
+.exag output { min-width:2.6em; font-variant-numeric:tabular-nums; }
+
+/* 우측 패널 */
+#panel { position:fixed; right:16px; top:16px; width:330px; max-height:calc(100% - 150px); display:flex; flex-direction:column;
+  background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:0 10px 30px rgba(0,0,0,.3); overflow:hidden; }
+#panel > header { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; padding:12px 16px; border:0; background:none; text-align:left; }
+#panel > header strong { font-size:15px; }
+#panel > header span { font-size:12px; color:var(--muted); }
+#panel .body { overflow:auto; padding:0 16px 14px; }
+#panel.collapsed .body { display:none; }
+.rank { list-style:none; margin:0; padding:0; display:grid; gap:4px; }
+.row { display:grid; grid-template-columns:18px 10px 1fr auto; align-items:center; column-gap:8px; row-gap:3px; width:100%;
+  padding:7px 8px; border:1px solid transparent; border-radius:8px; background:none; text-align:left; }
+.row:hover { background:#fff; }
+.row.on { background:#fff; border-color:var(--c); }
+.rk { font-size:12px; color:var(--muted); text-align:center; font-variant-numeric:tabular-nums; }
+.dot { width:10px; height:10px; border-radius:50%; background:var(--c); }
+.nm { font-size:13.5px; font-weight:600; }
+.val { font-size:13px; font-variant-numeric:tabular-nums; }
+.bar { grid-column:2 / -1; height:5px; border-radius:3px; background:var(--line); overflow:hidden; }
+.bar i { display:block; height:100%; background:var(--c); border-radius:3px; transition:width .4s; }
+.detail { margin-top:12px; padding-top:12px; border-top:1px solid var(--line); font-size:13px; }
+.detail h2 { margin:0; font-size:17px; display:flex; align-items:center; gap:8px; }
+.detail h2::before { content:""; width:12px; height:12px; border-radius:50%; background:var(--c); }
+.detail .desc { margin:2px 0 10px; color:var(--muted); }
+.big { font-size:28px; font-weight:800; letter-spacing:-1px; font-variant-numeric:tabular-nums; line-height:1.1; }
+.big small { font-size:13px; font-weight:600; color:var(--muted); letter-spacing:0; margin-left:4px; }
+.delta { font-size:12.5px; font-weight:700; margin-left:6px; }
+.stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:10px 0; }
+.stats div { padding:8px 10px; border-radius:8px; background:#fff; border:1px solid var(--line); }
+.stats dt { font-size:11.5px; color:var(--muted); }
+.stats dd { margin:0; font-weight:700; font-variant-numeric:tabular-nums; }
+.detail svg { width:100%; height:auto; display:block; }
+.detail svg rect { cursor:pointer; }
+.detail svg text { font-size:9px; fill:var(--muted); }
+.hint { margin:12px 0 0; padding-top:12px; border-top:1px solid var(--line); color:var(--muted); font-size:12.5px; }
+
+/* 하단 타임라인 */
+.timeline { position:fixed; left:50%; bottom:34px; transform:translateX(-50%); width:min(640px,calc(100% - 32px));
+  display:grid; grid-template-columns:46px 1fr; gap:6px 14px; align-items:center; padding:12px 18px;
+  background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:0 10px 30px rgba(0,0,0,.3); }
+#play { grid-row:1 / span 2; width:46px; height:46px; border:0; border-radius:50%; background:var(--green); color:#fff; font-size:17px; }
+#play:hover { background:#1b3f37; }
+.tl-top { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+#monthLabel { font-size:20px; font-weight:800; letter-spacing:-.5px; }
+.tl-top span { font-size:12px; color:var(--muted); }
+#month { width:100%; accent-color:var(--orange); }
+.credit { position:fixed; left:0; right:0; bottom:8px; margin:0; padding:0 16px; text-align:center; color:#fff; opacity:.7; font-size:11px; }
+.credit a { color:inherit; }
+
+#loading { position:fixed; inset:0; display:grid; place-items:center; background:var(--bg); color:#fff; text-align:center; z-index:10; transition:opacity .6s; }
+#loading.done { opacity:0; pointer-events:none; }
+#loading p { margin:8px 0 0; font-size:14px; opacity:.85; }
+.spin { width:34px; height:34px; margin:auto; border-radius:50%; border:3px solid rgba(255,255,255,.25); border-top-color:#fff; animation:spin 1s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation:none; } .bar i { transition:none; } }
+
+@media (max-width:760px) {
+  .title { left:14px; top:12px; }
+  .title h1 { font-size:18px; }
+  .title p { font-size:11.5px; }
+  .tools { left:14px; top:84px; gap:6px; }
+  .chip,.exag { height:32px; font-size:12px; padding:0 10px; }
+  .exag input { width:64px; }
+  .tag { font-size:11px; padding:3px 7px 3px 6px; gap:4px; }
+  .lm { font-size:10.5px; }
+  #panel { left:12px; right:12px; top:auto; bottom:172px; width:auto; max-height:44vh; }
+  .timeline { bottom:60px; padding:10px 14px; }
+  #monthLabel { font-size:17px; }
+  .credit { font-size:10px; line-height:1.35; bottom:6px; }
+}
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="gl" tabindex="0" aria-label="제주 3D 입체 지도. 드래그해서 회전하고 휠이나 핀치로 확대할 수 있습니다."></canvas>
+<div id="labels" aria-hidden="false"></div>
+
+<header class="title">
+  <h1>제주 3D 관광 지도</h1>
+  <p>드래그 회전 · 휠/핀치 확대 · 우클릭/두 손가락 이동 — 기둥 높이는 월별 관람객수</p>
+</header>
+
+<div class="tools">
+  <button class="chip" id="btnRotate" type="button" aria-pressed="true">자동 회전</button>
+  <button class="chip" id="btnHome" type="button">처음 시점</button>
+  <button class="chip" id="btnTop" type="button">위에서 보기</button>
+  <label class="exag">지형 높이
+    <input id="exag" type="range" min="1" max="5" step="0.5" value="2.5" aria-label="지형 높이 과장 배율">
+    <output id="exagOut">×2.5</output>
+  </label>
+</div>
+
+<aside id="panel" aria-label="관광지 정보">
+  <header id="panelHeader" role="button" tabindex="0" aria-expanded="true">
+    <strong>서귀포 직영관광지</strong><span id="panelSub"></span>
+  </header>
+  <div class="body">
+    <ol class="rank" id="rank"></ol>
+    <div id="detail"></div>
+  </div>
+</aside>
+
+<section class="timeline" aria-label="월 선택">
+  <button id="play" type="button" aria-label="월별 변화 재생">▶</button>
+  <div class="tl-top"><div id="monthLabel" aria-live="polite"></div><span id="monthSum"></span></div>
+  <input id="month" type="range" min="0" max="18" step="1" value="0" aria-label="월 선택">
+</section>
+
+<p class="credit">데이터: 제주특별자치도 서귀포시 직영관광지 관람객수 추이(공공데이터포털, 기준일 <span id="baseDate"></span>) · 지형: NASA SRTM · 관광지 위치는 개략 좌표입니다.</p>
+
+<div id="loading"><div><div class="spin"></div><p>제주 지형을 만드는 중…</p></div></div>
+<noscript><p style="position:fixed;inset:0;display:grid;place-items:center;color:#fff;background:#0b2530">3D 지도를 보려면 JavaScript가 필요합니다.</p></noscript>
+
+<script src="data.js"></script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const $ = s => document.querySelector(s);
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const DEM = window.JEJU_DEM, VIS = window.JEJU_VISITORS;
+const fmt = n => n.toLocaleString('ko-KR');
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const monthText = ym => { const [y, m] = ym.split('-'); return `${y}년 ${+m}월`; };
+
+/* ---------- 데이터 ---------- */
+const names = Object.keys(VIS.series);
+const series = names.map(n => VIS.series[n]);
+const NM = VIS.months.length;
+const SPOTS = [
+  { lon:126.5545, lat:33.2470, color:'#3fd0ff', desc:'서귀포 시내 가까이 떨어지는 폭포' },
+  { lon:126.4122, lat:33.2538, color:'#6f8bff', desc:'3단으로 이어지는 중문 계곡 폭포' },
+  { lon:126.5718, lat:33.2443, color:'#b98cff', desc:'바다로 곧장 떨어지는 해안 폭포' },
+  { lon:126.4258, lat:33.2380, color:'#ff5d9e', desc:'파도에 깎인 육각 기둥 암벽 해안' },
+  { lon:126.3140, lat:33.2330, color:'#ffd23f', desc:'해안에 우뚝 솟은 산방산과 용머리해안' },
+  { lon:126.6180, lat:33.2930, color:'#ff8a3d', desc:'제주 감귤 문화를 소개하는 박물관' },
+].map((s, i) => ({ ...s, i, name: names[i].replace('_', '·') }));
+const LANDMARKS = [
+  { name:'한라산', lon:126.5292, lat:33.3617 },
+  { name:'성산일출봉', lon:126.9425, lat:33.4584 },
+  { name:'송악산', lon:126.2879, lat:33.2058 },
+  { name:'제주시', lon:126.5312, lat:33.4996 },
+  { name:'서귀포시', lon:126.5601, lat:33.2541 },
+  { name:'우도', lon:126.9540, lat:33.5017 },
+];
+const MAXV = Math.max(...series.flat());
+const sumAt = m => series.reduce((a, s) => a + s[m], 0);
+let peakMonth = 0; for (let m = 0; m < NM; m++) if (sumAt(m) > sumAt(peakMonth)) peakMonth = m;
+$('#baseDate').textContent = VIS.base;
+
+/* ---------- 렌더러 / 씬 ---------- */
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas: $('#gl'), antialias: true });
+} catch (e) {
+  $('#loading').innerHTML = '<p>이 브라우저에서는 WebGL을 쓸 수 없어 3D 지도를 표시하지 못합니다.</p>';
+  throw e;
+}
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b2530);
+scene.fog = new THREE.Fog(0x0b2530, 200, 480);
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+
+scene.add(new THREE.HemisphereLight(0xd6ecff, 0x4a5a40, 1.0));
+const sun = new THREE.DirectionalLight(0xfff0d6, 2.3);
+sun.position.set(-45, 38, 42);
+scene.add(sun);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.minDistance = 4;
+controls.maxDistance = 280;
+controls.maxPolarAngle = Math.PI * 0.47;
+controls.screenSpacePanning = false;
+controls.autoRotate = !reduceMotion;
+controls.autoRotateSpeed = 0.55;
+controls.listenToKeyEvents(window);
+
+/* ---------- 지형 ---------- */
+const W = DEM.w, H = DEM.h, N = W * H;
+const KM_LON = 111.32 * Math.cos(33.33 * Math.PI / 180);
+const WIDTH = (DEM.lon1 - DEM.lon0) * KM_LON;
+const DEPTH = (DEM.lat1 - DEM.lat0) * 110.95;
+const toXZ = (lon, lat) => [
+  (lon - DEM.lon0) / (DEM.lon1 - DEM.lon0) * WIDTH - WIDTH / 2,
+  (DEM.lat1 - lat) / (DEM.lat1 - DEM.lat0) * DEPTH - DEPTH / 2,
+];
+
+const hm = (() => {
+  const bin = atob(DEM.b64), u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return new Uint16Array(u8.buffer);
+})();
+
+const land = new Uint8Array(N);
+for (let i = 0; i < N; i++) land[i] = hm[i] >= 2 ? 1 : 0;
+
+// 바다 격자의 해안까지 거리 (chamfer) → 수심·색
+const dist = new Float32Array(N);
+for (let i = 0; i < N; i++) dist[i] = land[i] ? 0 : 1e4;
+for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+  const i = y * W + x; let d = dist[i];
+  if (x > 0) d = Math.min(d, dist[i - 1] + 1);
+  if (y > 0) {
+    d = Math.min(d, dist[i - W] + 1);
+    if (x > 0) d = Math.min(d, dist[i - W - 1] + 1.414);
+    if (x < W - 1) d = Math.min(d, dist[i - W + 1] + 1.414);
+  }
+  dist[i] = d;
+}
+for (let y = H - 1; y >= 0; y--) for (let x = W - 1; x >= 0; x--) {
+  const i = y * W + x; let d = dist[i];
+  if (x < W - 1) d = Math.min(d, dist[i + 1] + 1);
+  if (y < H - 1) {
+    d = Math.min(d, dist[i + W] + 1);
+    if (x < W - 1) d = Math.min(d, dist[i + W + 1] + 1.414);
+    if (x > 0) d = Math.min(d, dist[i + W - 1] + 1.414);
+  }
+  dist[i] = d;
+}
+const seaT = new Float32Array(N);         // 0 = 해안, 1 = 깊은 바다
+for (let i = 0; i < N; i++) seaT[i] = land[i] ? 0 : 1 - Math.exp(-dist[i] / 14);
+
+// 고도 → 색 (sRGB 값을 선형으로 변환해 LUT 구성)
+const lin = v => Math.pow(v / 255, 2.2);
+const STOPS = [[0,[217,207,160]],[10,[190,200,138]],[80,[132,172,98]],[300,[90,144,82]],[700,[62,110,72]],
+  [1100,[102,116,78]],[1500,[148,136,112]],[2000,[196,186,166]]];
+const LUT = new Float32Array(2001 * 3);
+for (let h = 0; h <= 2000; h++) {
+  let k = 1; while (k < STOPS.length - 1 && h > STOPS[k][0]) k++;
+  const [h0, c0] = STOPS[k - 1], [h1, c1] = STOPS[k], t = clamp((h - h0) / (h1 - h0), 0, 1);
+  for (let c = 0; c < 3; c++) LUT[h * 3 + c] = lin(c0[c] + (c1[c] - c0[c]) * t);
+}
+const SHALLOW = [92,196,190].map(lin), DEEP = [14,70,96].map(lin), ROCK = [128,118,104].map(lin);
+
+const geo = new THREE.PlaneGeometry(WIDTH, DEPTH, W - 1, H - 1);
+geo.rotateX(-Math.PI / 2);
+const pos = geo.attributes.position;
+const colors = new Float32Array(N * 3);
+geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+const terrain = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 }));
+scene.add(terrain);
+
+let exag = 2.5;
+function refreshTerrain() {
+  const p = pos.array;
+  for (let i = 0; i < N; i++) p[i * 3 + 1] = land[i] ? hm[i] / 1000 * exag + 0.03 : -0.55 * seaT[i];
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  const nrm = geo.attributes.normal.array;
+  for (let i = 0; i < N; i++) {
+    const o = i * 3, jit = 1 + ((Math.imul(i, 2654435761) >>> 0) / 4294967296 - 0.5) * 0.12;
+    let r, g, b;
+    if (land[i]) {
+      const L = Math.min(hm[i], 2000) * 3;
+      r = LUT[L]; g = LUT[L + 1]; b = LUT[L + 2];
+      const t = clamp((0.84 - nrm[o + 1]) / 0.35, 0, 1) * 0.65;       // 급경사는 암석색
+      r += (ROCK[0] - r) * t; g += (ROCK[1] - g) * t; b += (ROCK[2] - b) * t;
+    } else {
+      const t = seaT[i];
+      r = SHALLOW[0] + (DEEP[0] - SHALLOW[0]) * t; g = SHALLOW[1] + (DEEP[1] - SHALLOW[1]) * t; b = SHALLOW[2] + (DEEP[2] - SHALLOW[2]) * t;
+    }
+    colors[o] = r * jit; colors[o + 1] = g * jit; colors[o + 2] = b * jit;
+  }
+  geo.attributes.color.needsUpdate = true;
+}
+function groundY(x, z) {
+  const fx = clamp((x + WIDTH / 2) / WIDTH * (W - 1), 0, W - 1.001), fy = clamp((z + DEPTH / 2) / DEPTH * (H - 1), 0, H - 1.001);
+  const x0 = Math.floor(fx), y0 = Math.floor(fy), tx = fx - x0, ty = fy - y0, p = pos.array, g = (xx, yy) => p[(yy * W + xx) * 3 + 1];
+  const v = (g(x0, y0) * (1 - tx) + g(x0 + 1, y0) * tx) * (1 - ty) + (g(x0, y0 + 1) * (1 - tx) + g(x0 + 1, y0 + 1) * tx) * ty;
+  return Math.max(v, 0.03);
+}
+
+/* ---------- 바다 ---------- */
+const deepFloor = new THREE.Mesh(new THREE.PlaneGeometry(900, 900).rotateX(-Math.PI / 2),
+  new THREE.MeshStandardMaterial({ color: 0x0e4660, roughness: 0.95, metalness: 0 }));
+deepFloor.position.y = -0.52;
+scene.add(deepFloor);
+const waterGeo = new THREE.PlaneGeometry(480, 340, 220, 156).rotateX(-Math.PI / 2);
+const water = new THREE.Mesh(waterGeo, new THREE.MeshStandardMaterial({
+  color: 0x2a8fa8, transparent: true, opacity: 0.58, roughness: 0.18, metalness: 0.05 }));
+water.position.y = 0.012;
+scene.add(water);
+const waterBase = waterGeo.attributes.position.array.slice();
+function animateWater(t) {
+  const p = waterGeo.attributes.position.array;
+  for (let i = 0; i < p.length; i += 3) {
+    const x = waterBase[i], z = waterBase[i + 2];
+    p[i + 1] = 0.022 * (Math.sin(x * 0.55 + t * 0.9) + Math.sin(z * 0.7 - t * 0.7) + Math.sin((x + z) * 0.3 + t * 0.5));
+  }
+  waterGeo.attributes.position.needsUpdate = true;
+  waterGeo.computeVertexNormals();
+}
+
+/* ---------- 관광지 기둥 ---------- */
+const BAR_MAX = 9, BAR_R = 0.5;
+const cyl = new THREE.CylinderGeometry(1, 1, 1, 28).translate(0, 0.5, 0);
+const ringGeo = new THREE.RingGeometry(0.85, 1.15, 40).rotateX(-Math.PI / 2);
+const barMeshes = [];
+SPOTS.forEach(s => {
+  [s.x, s.z] = toXZ(s.lon, s.lat);
+  const col = new THREE.Color(s.color);
+  s.bar = new THREE.Mesh(cyl, new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.3, roughness: 0.4, metalness: 0.1 }));
+  s.bar.userData.i = s.i;
+  s.ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.85, depthWrite: false }));
+  s.cur = 0; s.target = 0;
+  scene.add(s.bar, s.ring);
+  barMeshes.push(s.bar);
+});
+function placeSpots() {
+  SPOTS.forEach(s => {
+    s.gy = groundY(s.x, s.z);
+    s.bar.position.set(s.x, s.gy, s.z);
+    s.ring.position.set(s.x, s.gy + 0.06, s.z);
+  });
+  LANDMARKS.forEach(l => { [l.x, l.z] = toXZ(l.lon, l.lat); l.gy = groundY(l.x, l.z); });
+}
+const barHeight = v => Math.max(0.15, v / MAXV * BAR_MAX);
+
+/* ---------- 라벨 ---------- */
+const labelsEl = $('#labels');
+SPOTS.forEach(s => {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'tag'; b.style.setProperty('--c', s.color);
+  b.innerHTML = `<span>${s.name}</span><b></b>`;
+  b.addEventListener('click', () => select(s.i));
+  labelsEl.appendChild(b); s.tag = b; s.tagVal = b.querySelector('b');
+});
+LANDMARKS.forEach(l => {
+  const d = document.createElement('div'); d.className = 'lm'; d.textContent = l.name;
+  labelsEl.appendChild(d); l.el = d;
+});
+
+/* ---------- 상태 / UI ---------- */
+let month = peakMonth, sel = -1, playing = false, lastTick = 0;
+const monthEl = $('#month'), playEl = $('#play');
+monthEl.max = NM - 1;
+
+function setMonth(m) {
+  month = m;
+  monthEl.value = m;
+  $('#monthLabel').textContent = monthText(VIS.months[m]);
+  $('#monthSum').textContent = `6곳 합계 ${fmt(sumAt(m))}명`;
+  $('#panelSub').textContent = monthText(VIS.months[m]);
+  SPOTS.forEach(s => { s.target = barHeight(series[s.i][m]); s.tagVal.textContent = fmt(series[s.i][m]); s.w = 0; });
+  renderRank(); renderDetail();
+}
+function renderRank() {
+  const order = SPOTS.map(s => s.i).sort((a, b) => series[b][month] - series[a][month]);
+  const max = series[order[0]][month];
+  $('#rank').innerHTML = order.map((i, r) => {
+    const v = series[i][month];
+    return `<li><button type="button" class="row${i === sel ? ' on' : ''}" data-i="${i}" style="--c:${SPOTS[i].color}">
+      <span class="rk">${r + 1}</span><span class="dot"></span><span class="nm">${SPOTS[i].name}</span>
+      <span class="val">${fmt(v)}명</span><span class="bar"><i style="width:${v / max * 100}%"></i></span></button></li>`;
+  }).join('');
+}
+function renderDetail() {
+  const el = $('#detail');
+  if (sel < 0) { el.innerHTML = '<p class="hint">지도의 기둥이나 목록을 눌러 관광지를 살펴보세요. 아래 슬라이더로 월을 바꾸면 기둥 높이가 변합니다.</p>'; return; }
+  const s = SPOTS[sel], arr = series[sel], v = arr[month], total = arr.reduce((a, b) => a + b, 0);
+  const peak = arr.indexOf(Math.max(...arr)), max = arr[peak];
+  let delta = '';
+  if (month > 0) {
+    const pct = (v - arr[month - 1]) / arr[month - 1] * 100;
+    delta = `<span class="delta" style="color:${pct >= 0 ? '#b3541f' : '#2d6a8f'}">${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(1)}%<small style="font-weight:500;color:var(--muted)"> 전월 대비</small></span>`;
+  }
+  const bw = 300 / NM;
+  const rects = arr.map((x, k) => {
+    const h = Math.max(2, x / max * 60);
+    return `<rect data-m="${k}" x="${k * bw + 1}" y="${62 - h}" width="${bw - 2}" height="${h}" rx="1.5" fill="${k === month ? s.color : '#cdd5c9'}"${k === month ? ` stroke="#233e35" stroke-width="1"` : ''}><title>${monthText(VIS.months[k])}: ${fmt(x)}명</title></rect>`;
+  }).join('');
+  el.innerHTML = `<section class="detail" style="--c:${s.color}">
+    <h2>${s.name}</h2><p class="desc">${s.desc}</p>
+    <div><span class="big">${fmt(v)}<small>명</small></span>${delta}</div>
+    <dl class="stats"><div><dt>${NM}개월 누적</dt><dd>${fmt(total)}명</dd></div><div><dt>최다 방문월</dt><dd>${monthText(VIS.months[peak])}</dd></div></dl>
+    <svg viewBox="0 0 300 76" role="img" aria-label="${s.name} 월별 관람객수 막대 그래프. 막대를 누르면 해당 월로 이동합니다.">${rects}
+      <text x="0" y="74">2025</text><text x="${12 * bw}" y="74">2026</text></svg></section>`;
+}
+$('#rank').addEventListener('click', e => { const b = e.target.closest('[data-i]'); if (b) select(+b.dataset.i); });
+$('#detail').addEventListener('click', e => { const r = e.target.closest('[data-m]'); if (r) { pause(); setMonth(+r.dataset.m); } });
+
+const panel = $('#panel'), panelHeader = $('#panelHeader');
+function togglePanel(open = panel.classList.contains('collapsed')) {
+  panel.classList.toggle('collapsed', !open); panelHeader.setAttribute('aria-expanded', String(open));
+}
+panelHeader.addEventListener('click', () => togglePanel());
+panelHeader.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePanel(); } });
+if (matchMedia('(max-width:760px)').matches) togglePanel(false);
+
+function select(i) {
+  sel = i; stopRotate();
+  SPOTS.forEach(s => s.tag.classList.toggle('on', s.i === i));
+  renderRank(); renderDetail();
+  if (i >= 0) {
+    const s = SPOTS[i];
+    flyTo(new THREE.Vector3(s.x, s.gy + s.target * 0.5, s.z), 30);
+    if (panel.classList.contains('collapsed') && !matchMedia('(max-width:760px)').matches) togglePanel(true);
+  }
+}
+
+function play() { playing = true; lastTick = performance.now(); playEl.textContent = '❚❚'; playEl.setAttribute('aria-label', '일시정지'); }
+function pause() { playing = false; playEl.textContent = '▶'; playEl.setAttribute('aria-label', '월별 변화 재생'); }
+playEl.addEventListener('click', () => playing ? pause() : play());
+monthEl.addEventListener('input', () => { pause(); setMonth(+monthEl.value); });
+
+const rotBtn = $('#btnRotate');
+function stopRotate() { controls.autoRotate = false; rotBtn.setAttribute('aria-pressed', 'false'); }
+rotBtn.setAttribute('aria-pressed', String(controls.autoRotate));
+rotBtn.addEventListener('click', () => { controls.autoRotate = !controls.autoRotate; rotBtn.setAttribute('aria-pressed', String(controls.autoRotate)); cancelFly(); });
+controls.addEventListener('start', () => { stopRotate(); cancelFly(); });
+
+const exagEl = $('#exag');
+let exagPending = false;
+exagEl.addEventListener('input', () => {
+  $('#exagOut').textContent = `×${(+exagEl.value).toFixed(1).replace('.0', '')}`;
+  if (exagPending) return; exagPending = true;
+  requestAnimationFrame(() => { exagPending = false; exag = +exagEl.value; refreshTerrain(); placeSpots(); });
+});
+
+/* ---------- 카메라 이동 ---------- */
+let fly = null;
+const homeDist = () => clamp(1.5 / camera.aspect, 1, 3.3);
+function flyToView(toPos, toTgt, dur = 1.4) {
+  cancelFly();
+  if (reduceMotion) { camera.position.copy(toPos); controls.target.copy(toTgt); return; }
+  fly = { t: 0, dur, p0: camera.position.clone(), p1: toPos, g0: controls.target.clone(), g1: toTgt };
+}
+function cancelFly() { fly = null; }
+function flyTo(target, radius) {
+  const s = new THREE.Spherical().setFromVector3(camera.position.clone().sub(controls.target));
+  s.radius = radius; s.phi = clamp(s.phi, 0.55, 1.15);
+  flyToView(target.clone().add(new THREE.Vector3().setFromSpherical(s)), target);
+}
+const homeView = () => { const k = homeDist(); return [new THREE.Vector3(0, 42 * k, 58 * k), new THREE.Vector3(0, 0.5, 2)]; };
+$('#btnHome').addEventListener('click', () => { stopRotate(); flyToView(...homeView(), 1.6); });
+$('#btnTop').addEventListener('click', () => { stopRotate(); const k = homeDist(); flyToView(new THREE.Vector3(0, 78 * k, 8), new THREE.Vector3(0, 0, 0), 1.6); });
+
+/* ---------- 선택 / 호버 ---------- */
+const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
+let down = null, hoverDirty = false, hover = -1;
+function pick(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  mouse.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(mouse, camera);
+  const hit = ray.intersectObjects(barMeshes, false)[0];
+  return hit ? hit.object.userData.i : -1;
+}
+renderer.domElement.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY }; });
+renderer.domElement.addEventListener('pointerup', e => {
+  if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5) { const i = pick(e); if (i >= 0) select(i); }
+  down = null;
+});
+renderer.domElement.addEventListener('pointermove', e => {
+  if (e.pointerType === 'touch' || e.buttons) return;
+  hoverDirty = e;
+});
+
+/* ---------- 크기 / 루프 ---------- */
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+
+const v3 = new THREE.Vector3();
+function projectLabels() {
+  const w = innerWidth, h = innerHeight, placed = [];
+  const items = SPOTS.map(s => {
+    v3.set(s.x, s.gy + s.cur + 0.5, s.z).project(camera);
+    return { el: s.tag, x: (v3.x * 0.5 + 0.5) * w, y: (-v3.y * 0.5 + 0.5) * h, vis: v3.z < 1, z: v3.z };
+  });
+  items.sort((a, b) => b.z - a.z);   // 가까운 라벨부터 배치
+  items.forEach(it => {
+    it.el.style.visibility = it.vis ? 'visible' : 'hidden';
+    if (!it.vis) return;
+    const bw = it.el.offsetWidth, bh = it.el.offsetHeight + 3;
+    let y = it.y;
+    for (let k = 0; k < 8; k++) {
+      const hit = placed.find(p => Math.abs(p.x - it.x) < (p.w + bw) / 2 && Math.abs(p.y - y) < bh);
+      if (!hit) break; y = hit.y - bh;
+    }
+    placed.push({ x: it.x, y, w: bw });
+    it.el.style.transform = `translate(${it.x.toFixed(1)}px,${y.toFixed(1)}px) translate(-50%,-100%)`;
+  });
+  LANDMARKS.forEach(l => {
+    v3.set(l.x, l.gy + 0.1, l.z).project(camera);
+    l.el.style.visibility = v3.z < 1 ? 'visible' : 'hidden';
+    l.el.style.transform = `translate(${((v3.x * 0.5 + 0.5) * w + 6).toFixed(1)}px,${((-v3.y * 0.5 + 0.5) * h).toFixed(1)}px) translate(0,-50%)`;
+  });
+}
+
+const clock = new THREE.Clock();
+function frame() {
+  requestAnimationFrame(frame);
+  const dt = Math.min(clock.getDelta(), 0.1), t = clock.elapsedTime;
+
+  if (playing && performance.now() - lastTick > 1100) { lastTick = performance.now(); setMonth((month + 1) % NM); }
+
+  if (fly) {
+    fly.t += dt / fly.dur;
+    const k = Math.min(fly.t, 1), e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+    camera.position.lerpVectors(fly.p0, fly.p1, e); controls.target.lerpVectors(fly.g0, fly.g1, e);
+    if (k >= 1) fly = null;
+  }
+  controls.target.x = clamp(controls.target.x, -WIDTH / 2, WIDTH / 2);
+  controls.target.z = clamp(controls.target.z, -DEPTH / 2, DEPTH / 2);
+  controls.target.y = clamp(controls.target.y, 0, 6);
+  controls.update();
+
+  const ease = reduceMotion ? 1 : 1 - Math.exp(-dt * 6);
+  SPOTS.forEach(s => {
+    s.cur += (s.target - s.cur) * ease;
+    s.bar.scale.set(BAR_R, s.cur, BAR_R);
+    const on = s.i === sel || s.i === hover;
+    s.bar.material.emissiveIntensity += ((on ? 0.9 : 0.3) - s.bar.material.emissiveIntensity) * 0.2;
+    const pulse = s.i === sel ? 1 + 0.35 * Math.sin(t * 3.5) : 1;
+    s.ring.scale.setScalar(BAR_R * 1.6 * pulse);
+  });
+
+  if (hoverDirty) {
+    const h = pick(hoverDirty); hoverDirty = false;
+    if (h !== hover) { hover = h; renderer.domElement.style.cursor = h >= 0 ? 'pointer' : ''; }
+  }
+
+  animateWater(t);
+  renderer.render(scene, camera);
+  projectLabels();
+}
+
+/* ---------- 시작 ---------- */
+setTimeout(() => { try {
+  resize();
+  refreshTerrain();
+  placeSpots();
+  SPOTS.forEach(s => { s.cur = 0.15; });
+  setMonth(peakMonth);
+  const [hp, ht] = homeView();
+  camera.position.copy(reduceMotion ? hp : hp.clone().multiplyScalar(1.6)); controls.target.copy(ht);
+  camera.lookAt(ht);
+  frame();
+  if (!reduceMotion) flyToView(hp, ht, 2.6);
+  $('#loading').classList.add('done');
+} catch (err) {
+  console.error(err);
+  $('#loading').innerHTML = `<p>3D 지도를 만들지 못했습니다: ${err.message}</p>`;
+} }, 30);
+</script>
+</body>
+</html>
