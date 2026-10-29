@@ -135,7 +135,7 @@ button:focus-visible,input:focus-visible { outline:3px solid var(--orange); outl
 
 <header class="title">
   <h1>제주 3D 관광 지도</h1>
-  <p>드래그 회전 · 휠/핀치 확대 · 우클릭/두 손가락 이동 — 기둥 높이는 월별 관람객수</p>
+  <p>드래그 회전 · 휠/핀치 확대 · 우클릭/두 손가락 이동 — 색 기둥 높이는 월별 관람객수</p>
 </header>
 
 <div class="tools">
@@ -164,7 +164,7 @@ button:focus-visible,input:focus-visible { outline:3px solid var(--orange); outl
   <input id="month" type="range" min="0" max="18" step="1" value="0" aria-label="월 선택">
 </section>
 
-<p class="credit">데이터: 제주특별자치도 서귀포시 직영관광지 관람객수 추이(공공데이터포털, 기준일 <span id="baseDate"></span>) · 지형: NASA SRTM · 관광지 위치는 개략 좌표입니다.</p>
+<p class="credit">데이터: 제주특별자치도 서귀포시 직영관광지 관람객수 추이(공공데이터포털, 기준일 <span id="baseDate"></span>) · 지형: NASA SRTM · 관광지 위치는 개략 좌표이며, 모형은 크기를 키운 상징 형상입니다. 모형 옆 색 기둥이 월별 관람객수입니다.</p>
 
 <div id="loading"><div><div class="spin"></div><p>제주 지형을 만드는 중…</p></div></div>
 <noscript><p style="position:fixed;inset:0;display:grid;place-items:center;color:#fff;background:#0b2530">3D 지도를 보려면 JavaScript가 필요합니다.</p></noscript>
@@ -186,12 +186,13 @@ const names = Object.keys(VIS.series);
 const series = names.map(n => VIS.series[n]);
 const NM = VIS.months.length;
 const SPOTS = [
-  { lon:126.5545, lat:33.2470, color:'#3fd0ff', desc:'서귀포 시내 가까이 떨어지는 폭포' },
-  { lon:126.4122, lat:33.2538, color:'#6f8bff', desc:'3단으로 이어지는 중문 계곡 폭포' },
-  { lon:126.5718, lat:33.2443, color:'#b98cff', desc:'바다로 곧장 떨어지는 해안 폭포' },
-  { lon:126.4258, lat:33.2380, color:'#ff5d9e', desc:'파도에 깎인 육각 기둥 암벽 해안' },
-  { lon:126.3140, lat:33.2330, color:'#ffd23f', desc:'해안에 우뚝 솟은 산방산과 용머리해안' },
-  { lon:126.6180, lat:33.2930, color:'#ff8a3d', desc:'제주 감귤 문화를 소개하는 박물관' },
+  // mdx: 모형이 겹치지 않게 동서로 벌리는 거리(km), pdx/pdz: 모형 옆 방문객 기둥 위치
+  { lon:126.5545, lat:33.2470, color:'#3fd0ff', mdx:-1.8, pdx:-2.3, pdz:0.6, desc:'서귀포 시내 가까이 떨어지는 폭포' },
+  { lon:126.4122, lat:33.2538, color:'#6f8bff', mdx:-1.8, pdx:-2.2, pdz:0.4, desc:'3단으로 이어지는 중문 계곡 폭포' },
+  { lon:126.5718, lat:33.2443, color:'#b98cff', mdx: 1.8, pdx: 2.3, pdz:0.6, desc:'바다로 곧장 떨어지는 해안 폭포' },
+  { lon:126.4258, lat:33.2380, color:'#ff5d9e', mdx: 1.8, pdx: 3.2, pdz:0.6, desc:'파도에 깎인 육각 기둥 암벽 해안' },
+  { lon:126.3140, lat:33.2330, color:'#ffd23f', mdx: 0,   pdx: 2.9, pdz:0.9, desc:'해안에 우뚝 솟은 산방산과 용머리해안' },
+  { lon:126.6180, lat:33.2930, color:'#ff8a3d', mdx: 0,   pdx:-2.6, pdz:0.7, desc:'제주 감귤 문화를 소개하는 박물관' },
 ].map((s, i) => ({ ...s, i, name: names[i].replace('_', '·') }));
 const LANDMARKS = [
   { name:'한라산', lon:126.5292, lat:33.3617 },
@@ -227,6 +228,9 @@ scene.add(new THREE.HemisphereLight(0xd6ecff, 0x4a5a40, 1.0));
 const sun = new THREE.DirectionalLight(0xfff0d6, 2.3);
 sun.position.set(-45, 38, 42);
 scene.add(sun);
+const fill = new THREE.DirectionalLight(0xbfd8ff, 1.1);   // 반대편 면이 새까맣지 않도록 보조광
+fill.position.set(45, 22, -40);
+scene.add(fill);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -294,7 +298,7 @@ for (let h = 0; h <= 2000; h++) {
   const [h0, c0] = STOPS[k - 1], [h1, c1] = STOPS[k], t = clamp((h - h0) / (h1 - h0), 0, 1);
   for (let c = 0; c < 3; c++) LUT[h * 3 + c] = lin(c0[c] + (c1[c] - c0[c]) * t);
 }
-const SHALLOW = [92,196,190].map(lin), DEEP = [14,70,96].map(lin), ROCK = [128,118,104].map(lin);
+const SHALLOW = [92,196,190].map(lin), DEEP = [14,70,96].map(lin), T_ROCK = [128,118,104].map(lin);
 
 const geo = new THREE.PlaneGeometry(WIDTH, DEPTH, W - 1, H - 1);
 geo.rotateX(-Math.PI / 2);
@@ -318,7 +322,7 @@ function refreshTerrain() {
       const L = Math.min(hm[i], 2000) * 3;
       r = LUT[L]; g = LUT[L + 1]; b = LUT[L + 2];
       const t = clamp((0.84 - nrm[o + 1]) / 0.35, 0, 1) * 0.65;       // 급경사는 암석색
-      r += (ROCK[0] - r) * t; g += (ROCK[1] - g) * t; b += (ROCK[2] - b) * t;
+      r += (T_ROCK[0] - r) * t; g += (T_ROCK[1] - g) * t; b += (T_ROCK[2] - b) * t;
     } else {
       const t = seaT[i];
       r = SHALLOW[0] + (DEEP[0] - SHALLOW[0]) * t; g = SHALLOW[1] + (DEEP[1] - SHALLOW[1]) * t; b = SHALLOW[2] + (DEEP[2] - SHALLOW[2]) * t;
@@ -355,26 +359,140 @@ function animateWater(t) {
   waterGeo.computeVertexNormals();
 }
 
-/* ---------- 관광지 기둥 ---------- */
-const BAR_MAX = 9, BAR_R = 0.5;
+/* ---------- 관광지 모형 (상징 형상, 크기는 키움) ---------- */
+const MODEL_SCALE = 1.25;
+const mat = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, ...o });
+const rockMat = c => mat(c, { roughness: 0.95, flatShading: true });
+const ROCK = rockMat(0x9b9686), ROCK_D = rockMat(0x6b6764), ROCK_L = rockMat(0x84807a), MOSS = mat(0x4f7d4a, { roughness: 1 });
+const TRUNK = mat(0x6b4a2f), LEAF = mat(0x3f7a45), ORANGE = mat(0xff8a1e, { roughness: 0.5 });
+const frac = n => { const x = Math.sin(n * 127.1) * 43758.5453; return x - Math.floor(x); };
+// y 는 상자 바닥 높이
+const box = (w, h, d, x, y, z, m) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y + h / 2, z); return o; };
+const ball = (r, x, y, z, m, sx = 1, sy = 1, sz = 1) => { const o = new THREE.Mesh(new THREE.SphereGeometry(r, 20, 14), m); o.position.set(x, y, z); o.scale.set(sx, sy, sz); return o; };
+const tree = (x, y, z, s = 1) => {
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 0.3, 6), TRUNK).translateY(0.15), ball(0.24, 0, 0.42, 0, LEAF));
+  g.position.set(x, y, z); g.scale.setScalar(s); return g;
+};
+const citrus = (x, z, s = 1) => {
+  const g = tree(x, 0, z, s);
+  for (let k = 0; k < 6; k++) { const a = k * 1.05; g.add(ball(0.06, Math.cos(a) * 0.2, 0.4 + Math.sin(a * 2.3) * 0.12, Math.sin(a) * 0.2, ORANGE)); }
+  return g;
+};
+
+// 흘러내리는 폭포(세로 줄무늬 텍스처를 아래로 흘려보냄)
+const fallTex = (() => {
+  const c = document.createElement('canvas'); c.width = 64; c.height = 128;
+  const g = c.getContext('2d');
+  for (let i = 0; i < 48; i++) {
+    g.fillStyle = `rgba(255,255,255,${0.35 + frac(i) * 0.65})`;
+    const x = frac(i + 9) * 64, w = 1 + frac(i + 3) * 3, y = frac(i + 5) * 128, h = 20 + frac(i + 7) * 70;
+    g.fillRect(x, y, w, h); g.fillRect(x, y - 128, w, h);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+const fallMat = new THREE.MeshBasicMaterial({ map: fallTex, color: 0xdff6ff, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+const fall = (w, top, bottom, x, z) => {
+  const o = new THREE.Mesh(new THREE.PlaneGeometry(w, top - bottom), fallMat);
+  o.position.set(x, (top + bottom) / 2, z); return o;
+};
+const pool = (r, x, z, c = 0x3fb7d4) => {
+  const o = new THREE.Mesh(new THREE.CircleGeometry(r, 28).rotateX(-Math.PI / 2),
+    new THREE.MeshStandardMaterial({ color: c, transparent: true, opacity: 0.88, roughness: 0.2 }));
+  o.position.set(x, 0.05, z); return o;
+};
+
+const MODELS = [
+  () => { // 천지연폭포: 절벽 + 폭포 + 소(沼)
+    const g = new THREE.Group();
+    g.add(box(2.8, 1.85, 1.1, 0, -0.15, -0.55, ROCK), box(3.0, 0.2, 1.3, 0, 1.6, -0.55, MOSS),
+      fall(0.55, 1.7, 0, 0, 0.04), pool(0.9, 0, 0.75),
+      tree(-1.1, 1.8, -0.6, 0.9), tree(1.0, 1.8, -0.7, 1.1), tree(0.3, 1.8, -0.9, 0.8), tree(-0.5, 0.0, 1.0, 0.9), tree(1.3, 0, 0.8, 1));
+    return g;
+  },
+  () => { // 천제연폭포: 3단 폭포
+    const g = new THREE.Group(), inner = new THREE.Group(); inner.position.z = -1.3;
+    const tops = [1.9, 1.3, 0.7];
+    tops.forEach((top, i) => {
+      const z = i * 0.9;
+      inner.add(box(2.4, top + 0.15, 0.9, 0, -0.15, z, ROCK), box(2.5, 0.12, 1.0, 0, top, z, MOSS));
+      inner.add(fall(0.5, top, tops[i + 1] ?? 0, 0, z + 0.48));
+    });
+    inner.add(pool(0.8, 0, 3.0), tree(-1.0, 1.9, 0, 0.9), tree(1.0, 1.3, 0.9, 0.9), tree(-1.1, 0.7, 1.8, 0.8), tree(1.1, 0, 2.8, 0.9));
+    g.add(inner); return g;
+  },
+  () => { // 정방폭포: 바다로 떨어지는 폭포
+    const g = new THREE.Group();
+    g.add(box(2.6, 1.2, 1.0, 0, -0.15, -0.5, ROCK), box(2.8, 0.16, 1.2, 0, 1.05, -0.5, MOSS),
+      fall(0.5, 1.1, 0, 0, 0.04), pool(1.3, 0, 0.9, 0x2a8fa8));
+    const foam = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.6, 28).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.65, depthWrite: false }));
+    foam.position.set(0, 0.07, 0.35); g.add(foam, tree(-1.0, 1.2, -0.6, 0.9), tree(0.9, 1.2, -0.6, 1));
+    return g;
+  },
+  () => { // 중문대포 주상절리대: 육각 기둥 다발
+    const g = new THREE.Group();
+    for (let r = 0; r < 5; r++) for (let c = 0; c < 9; c++) {
+      const h = 0.45 + (4 - r) * 0.3 + frac(r * 9 + c) * 0.25;
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, h + 0.15, 6), (r + c) % 3 ? ROCK_D : ROCK_L);
+      m.position.set((c - 4) * 0.43 + (r % 2) * 0.215, (h - 0.15) / 2, (r - 2) * 0.38);
+      m.rotation.y = Math.PI / 6; g.add(m);
+    }
+    g.add(pool(1.4, 0, 1.8, 0x2a8fa8));
+    return g;
+  },
+  () => { // 산방산: 종 모양 화산 돔 + 용머리해안
+    const g = new THREE.Group();
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), rockMat(0x8a8574));
+    dome.scale.set(1.6, 2.1, 1.6); dome.position.y = -0.1;
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10, 0, Math.PI * 2, 0, 0.6), rockMat(0x5f8a52));
+    cap.scale.set(1.62, 2.12, 1.62); cap.position.y = -0.1;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), rockMat(0x9a7048));
+    head.scale.set(1.5, 0.4, 0.6); head.position.set(-2.3, -0.05, 1.5); head.rotation.y = 0.5;
+    g.add(dome, cap, head, tree(1.5, 0, 1.0, 1), tree(1.9, 0, 0.2, 0.9), tree(-1.5, 0, 0.9, 0.9));
+    return g;
+  },
+  () => { // 감귤박물관: 박물관 건물 + 오렌지 돔 + 큰 귤 + 귤나무
+    const g = new THREE.Group();
+    const roof = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), ORANGE);
+    roof.scale.set(1.15, 0.55, 0.7); roof.position.y = 0.6;
+    const tang = ball(0.45, 1.7, 0.45, 0.5, ORANGE, 1, 0.9, 1);
+    const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.22, 6), LEAF); leaf.position.set(1.7, 0.92, 0.5); leaf.rotation.z = 0.5;
+    g.add(box(2.0, 0.75, 1.2, 0, -0.15, 0, mat(0xf3e7c9)), box(2.2, 0.08, 1.4, 0, 0.6, 0, mat(0xd9c9a3)),
+      box(0.8, 0.15, 0.3, 0, -0.15, 0.75, mat(0xd9c9a3)), roof, tang, leaf,
+      citrus(-1.5, 0.5, 1.2), citrus(-1.2, -0.7, 1.1), citrus(1.1, -0.8, 1.2), citrus(0.2, 1.3, 1));
+    return g;
+  },
+];
+
+/* ---------- 방문객 기둥 ---------- */
+const BAR_MAX = 6, BAR_R = 0.34;
 const cyl = new THREE.CylinderGeometry(1, 1, 1, 28).translate(0, 0.5, 0);
 const ringGeo = new THREE.RingGeometry(0.85, 1.15, 40).rotateX(-Math.PI / 2);
-const barMeshes = [];
+const barMeshes = [];   // 클릭·호버 대상: 기둥 + 모형 전체
 SPOTS.forEach(s => {
   [s.x, s.z] = toXZ(s.lon, s.lat);
   const col = new THREE.Color(s.color);
   s.bar = new THREE.Mesh(cyl, new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.3, roughness: 0.4, metalness: 0.1 }));
-  s.bar.userData.i = s.i;
   s.ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.85, depthWrite: false }));
+  s.model = MODELS[s.i]();
+  s.model.scale.setScalar(MODEL_SCALE);
   s.cur = 0; s.target = 0;
-  scene.add(s.bar, s.ring);
+  scene.add(s.bar, s.ring, s.model);
+  s.bar.userData.i = s.i;
   barMeshes.push(s.bar);
+  s.model.traverse(o => { if (o.isMesh && o.material !== fallMat) { o.userData.i = s.i; barMeshes.push(o); } });
 });
 function placeSpots() {
   SPOTS.forEach(s => {
-    s.gy = groundY(s.x, s.z);
-    s.bar.position.set(s.x, s.gy, s.z);
-    s.ring.position.set(s.x, s.gy + 0.06, s.z);
+    s.mx = s.x + s.mdx; s.mz = s.z;
+    s.px = s.mx + s.pdx; s.pz = s.mz + s.pdz;
+    s.my = groundY(s.mx, s.mz); s.gy = groundY(s.px, s.pz);
+    s.model.position.set(s.mx, s.my, s.mz);
+    s.bar.position.set(s.px, s.gy, s.pz);
+    s.ring.position.set(s.px, s.gy + 0.06, s.pz);
   });
   LANDMARKS.forEach(l => { [l.x, l.z] = toXZ(l.lon, l.lat); l.gy = groundY(l.x, l.z); });
 }
@@ -457,7 +575,7 @@ function select(i) {
   renderRank(); renderDetail();
   if (i >= 0) {
     const s = SPOTS[i];
-    flyTo(new THREE.Vector3(s.x, s.gy + s.target * 0.5, s.z), 30);
+    flyTo(new THREE.Vector3((s.mx + s.px) / 2, s.gy + Math.max(s.target * 0.5, 1.2), (s.mz + s.pz) / 2), 30);
     if (panel.classList.contains('collapsed') && !matchMedia('(max-width:760px)').matches) togglePanel(true);
   }
 }
@@ -530,7 +648,7 @@ const v3 = new THREE.Vector3();
 function projectLabels() {
   const w = innerWidth, h = innerHeight, placed = [];
   const items = SPOTS.map(s => {
-    v3.set(s.x, s.gy + s.cur + 0.5, s.z).project(camera);
+    v3.set(s.px, s.gy + s.cur + 0.5, s.pz).project(camera);
     return { el: s.tag, x: (v3.x * 0.5 + 0.5) * w, y: (-v3.y * 0.5 + 0.5) * h, vis: v3.z < 1, z: v3.z };
   });
   items.sort((a, b) => b.z - a.z);   // 가까운 라벨부터 배치
@@ -586,6 +704,7 @@ function frame() {
     if (h !== hover) { hover = h; renderer.domElement.style.cursor = h >= 0 ? 'pointer' : ''; }
   }
 
+  fallTex.offset.y += dt * 0.9;
   animateWater(t);
   renderer.render(scene, camera);
   projectLabels();
