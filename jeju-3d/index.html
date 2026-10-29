@@ -33,8 +33,8 @@ button:focus-visible,input:focus-visible { outline:3px solid var(--orange); outl
   background:rgba(11,37,48,.84); color:#fff; font-size:12.5px; white-space:nowrap; will-change:transform;
   box-shadow:0 2px 8px rgba(0,0,0,.35); }
 .tag b { font-variant-numeric:tabular-nums; color:var(--c); filter:brightness(1.25); }
-.tag:hover,.tag.on { background:#fff; color:var(--ink); }
-.tag:hover b,.tag.on b { color:var(--ink); filter:none; }
+.tag:hover,.tag.on,.tag.hv { background:#fff; color:var(--ink); }
+.tag:hover b,.tag.on b,.tag.hv b { color:var(--ink); filter:none; }
 .tag.on { box-shadow:0 0 0 2px var(--c),0 4px 14px rgba(0,0,0,.4); }
 .lm { position:absolute; left:0; top:0; font-size:11.5px; color:#fff; opacity:.8; white-space:nowrap; will-change:transform;
   text-shadow:0 1px 3px rgba(0,0,0,.8); display:flex; align-items:center; gap:5px; }
@@ -287,6 +287,9 @@ for (let y = H - 1; y >= 0; y--) for (let x = W - 1; x >= 0; x--) {
 }
 const seaT = new Float32Array(N);         // 0 = 해안, 1 = 깊은 바다
 for (let i = 0; i < N; i++) seaT[i] = land[i] ? 0 : 1 - Math.exp(-dist[i] / 14);
+// 해안선이 계단처럼 보이지 않도록 육지↔바다를 격자 한 칸 안에서 부드럽게 섞는다
+const landF = new Float32Array(N);
+for (let i = 0; i < N; i++) landF[i] = clamp(hm[i] / 8, 0, 1);
 
 // 고도 → 색 (sRGB 값을 선형으로 변환해 LUT 구성)
 const lin = v => Math.pow(v / 255, 2.2);
@@ -311,21 +314,21 @@ scene.add(terrain);
 let exag = 2.5;
 function refreshTerrain() {
   const p = pos.array;
-  for (let i = 0; i < N; i++) p[i * 3 + 1] = land[i] ? hm[i] / 1000 * exag + 0.03 : -0.55 * seaT[i];
+  for (let i = 0; i < N; i++) p[i * 3 + 1] = landF[i] * (hm[i] / 1000 * exag + 0.03) + (1 - landF[i]) * (-0.55 * seaT[i]);
   pos.needsUpdate = true;
   geo.computeVertexNormals();
   const nrm = geo.attributes.normal.array;
   for (let i = 0; i < N; i++) {
     const o = i * 3, jit = 1 + ((Math.imul(i, 2654435761) >>> 0) / 4294967296 - 0.5) * 0.12;
-    let r, g, b;
-    if (land[i]) {
+    const t = seaT[i];
+    let r = SHALLOW[0] + (DEEP[0] - SHALLOW[0]) * t, g = SHALLOW[1] + (DEEP[1] - SHALLOW[1]) * t, b = SHALLOW[2] + (DEEP[2] - SHALLOW[2]) * t;
+    const f = landF[i];
+    if (f > 0) {
       const L = Math.min(hm[i], 2000) * 3;
-      r = LUT[L]; g = LUT[L + 1]; b = LUT[L + 2];
-      const t = clamp((0.84 - nrm[o + 1]) / 0.35, 0, 1) * 0.65;       // 급경사는 암석색
-      r += (T_ROCK[0] - r) * t; g += (T_ROCK[1] - g) * t; b += (T_ROCK[2] - b) * t;
-    } else {
-      const t = seaT[i];
-      r = SHALLOW[0] + (DEEP[0] - SHALLOW[0]) * t; g = SHALLOW[1] + (DEEP[1] - SHALLOW[1]) * t; b = SHALLOW[2] + (DEEP[2] - SHALLOW[2]) * t;
+      let lr = LUT[L], lg = LUT[L + 1], lb = LUT[L + 2];
+      const k = clamp((0.84 - nrm[o + 1]) / 0.35, 0, 1) * 0.65;       // 급경사는 암석색
+      lr += (T_ROCK[0] - lr) * k; lg += (T_ROCK[1] - lg) * k; lb += (T_ROCK[2] - lb) * k;
+      r += (lr - r) * f; g += (lg - g) * f; b += (lb - b) * f;
     }
     colors[o] = r * jit; colors[o + 1] = g * jit; colors[o + 2] = b * jit;
   }
@@ -564,6 +567,7 @@ $('#detail').addEventListener('click', e => { const r = e.target.closest('[data-
 const panel = $('#panel'), panelHeader = $('#panelHeader');
 function togglePanel(open = panel.classList.contains('collapsed')) {
   panel.classList.toggle('collapsed', !open); panelHeader.setAttribute('aria-expanded', String(open));
+  resize();
 }
 panelHeader.addEventListener('click', () => togglePanel());
 panelHeader.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePanel(); } });
@@ -638,9 +642,12 @@ renderer.domElement.addEventListener('pointermove', e => {
 });
 
 /* ---------- 크기 / 루프 ---------- */
+// 패널·타임라인에 가려지지 않도록 화면 중심을 열린 영역으로 옮긴다
 function resize() {
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  const wide = w > 760, ox = wide && !panel.classList.contains('collapsed') ? 165 : 0, oy = wide ? 40 : 70;
+  camera.setViewOffset(w, h, ox, oy, w, h);
 }
 addEventListener('resize', resize);
 
@@ -672,6 +679,7 @@ function projectLabels() {
 }
 
 const clock = new THREE.Clock();
+let frameN = 0;
 function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(clock.getDelta(), 0.1), t = clock.elapsedTime;
@@ -701,11 +709,14 @@ function frame() {
 
   if (hoverDirty) {
     const h = pick(hoverDirty); hoverDirty = false;
-    if (h !== hover) { hover = h; renderer.domElement.style.cursor = h >= 0 ? 'pointer' : ''; }
+    if (h !== hover) {
+      hover = h; renderer.domElement.style.cursor = h >= 0 ? 'pointer' : '';
+      SPOTS.forEach(s => s.tag.classList.toggle('hv', s.i === h));
+    }
   }
 
   fallTex.offset.y += dt * 0.9;
-  animateWater(t);
+  if ((frameN++ & 1) === 0) animateWater(t);   // 파도는 2프레임에 한 번만 갱신
   renderer.render(scene, camera);
   projectLabels();
 }
